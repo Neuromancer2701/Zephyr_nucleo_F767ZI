@@ -1,0 +1,36 @@
+FROM ros:jazzy
+LABEL maintainer="Seth M King"
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ="America/NewYork"
+
+
+ SHELL ["/bin/bash", "-c"]
+
+RUN apt update && apt -y upgrade
+RUN apt -y install --no-install-recommends git cmake ninja-build gperf \
+  ccache dfu-util device-tree-compiler wget \
+  python3-dev python3-pip python3-venv python3-setuptools python3-tk python3-wheel xz-utils file \
+  make gcc gcc-multilib g++-multilib libsdl2-dev libmagic1
+
+WORKDIR /checkout/src/zephyr/
+RUN python3 -m venv .venv \
+    && source .venv/bin/activate \
+    && pip3 install -U west --break-system-packages \
+    && west init . \
+    && west update \
+    && west zephyr-export \
+    && west packages pip --install \
+    && mkdir sdk \
+    && cd sdk \
+    && west sdk install \
+    && cd .. && git clone https://github.com/micro-ROS/micro_ros_zephyr_module.git modules/micro_ros
+
+
+ENV DOCKER_NAME=ZEPHR_ST32_F767ZI \
+    DOCKER_IMAGE_VERSION=0.0.1-alpha
+
+WORKDIR /checkout/src
+	
+
+
