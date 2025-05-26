@@ -1,171 +1,141 @@
-Creating a micro-ROS application on Zephyr for the **ST Nucleo STM32F767** involves several steps, including setting up the necessary tools and dependencies, configuring Zephyr for the hardware, integrating micro-ROS, and building the application. Here's a step-by-step guide:
+# micro-ROS on Zephyr for ST Nucleo STM32F767 via Docker
 
-### Prerequisites
+This project provides a Dockerized environment for developing and building micro-ROS applications for the ST Nucleo STM32F767 board using Zephyr RTOS.
 
-- **Hardware**: ST Nucleo STM32F767 development board
-- **Host OS**: Linux (Ubuntu recommended) or Windows with WSL2
-- **Software tools**: 
-  - [Zephyr SDK](https://docs.zephyrproject.org/latest/develop/getting_started/index.html#install-the-zephyr-sdk)
-  - [West](https://docs.zephyrproject.org/latest/develop/west/index.html) (Zephyr’s meta-tool)
-  - [STM32CubeMX](https://www.st.com/en/development-tools/stm32cubemx.html) (optional for code generation)
-  - [micro-ROS build system](https://micro.ros.org/docs/tutorials/core/first_application_rtos/)
+## Prerequisites
 
----
+- Docker installed on your host machine.
+- ST Nucleo STM32F767 development board (for flashing and testing).
+- Basic understanding of ROS 2 and Zephyr.
 
-### Step-by-Step Guide
+## Directory Structure
 
-#### 1. Install Required Tools
+- `docker/`: Contains the Dockerfile for building the development environment.
+- `src/`: Contains the sample micro-ROS application source code (`main.cpp`, `CMakeLists.txt`, `prj.conf`).
 
-**a. Install Zephyr development environment:**
+## Setup and Build Instructions
 
-1. Follow the official Zephyr Project documentation to [set up the environment](https://docs.zephyrproject.org/latest/develop/getting_started/index.html).
-   - Install `west`, which is Zephyr's meta-tool, to manage the repositories and the build.
-   - Set up the Zephyr SDK and the necessary dependencies.
+### 1. Build the Docker Image
+
+Navigate to the root directory of this repository and run:
 
 ```bash
-pip3 install --user -U west
-west init zephyrproject
-cd zephyrproject
-west update
+docker build -t micro-ros-zephyr-stm32f767 docker/
 ```
 
-**b. Install the micro-ROS build system:**
+This command builds the Docker image named `micro-ros-zephyr-stm32f767` using the `docker/dockerfile`. The image will contain Zephyr, the necessary toolchain, west, and micro-ROS components.
 
-- Follow the official guide to [set up the micro-ROS build system](https://micro.ros.org/docs/tutorials/core/first_application_rtos/). You will need ROS 2 and colcon.
+### 2. Run the Docker Container
 
----
+Once the image is built, run a container with the `src` directory mounted as a volume. This allows you to edit the application code on your host machine and build it inside the container.
 
-#### 2. Set Up the ST Nucleo STM32F767 Board with Zephyr
-
-**a. Create a new Zephyr workspace:**
+Open a terminal and run:
 
 ```bash
-cd ~/zephyrproject
-west init -m https://github.com/zephyrproject-rtos/zephyr
-west update
+docker run -it --rm \
+  -v $(pwd)/src:/app \
+  micro-ros-zephyr-stm32f767 \
+  bash
 ```
 
-**b. Install the Zephyr toolchain for STM32:**
+This command:
+- Starts an interactive terminal (`-it`) in the Docker container.
+- Removes the container when it exits (`--rm`).
+- Mounts the current directory's `src` folder to `/app` inside the container (`-v $(pwd)/src:/app`).
+- Uses the image `micro-ros-zephyr-stm32f767` we built earlier.
+- Runs `bash` as the entry command, giving you a shell inside the container.
 
-Follow the instructions in the Zephyr documentation to install the STM32 toolchain.
+You will now be inside the container's shell, in the `/app` directory (which is your `src` directory). The Zephyr environment (`ZEPHYR_BASE`, SDK, `west` in PATH) is already set up.
 
-- **Install STM32CubeMX** (optional but helpful if you want to configure peripherals like UART, SPI, etc.)
-  
-**c. Add the Zephyr board support for STM32F767:**
+### 3. Build the micro-ROS Application
 
-Make sure that the Zephyr SDK has support for STM32F767.
+Inside the Docker container's shell (in the `/app` directory):
+
+First, create a build directory and navigate into it:
+```bash
+mkdir build && cd build
+```
+
+Then, run `west build` to compile the application:
+```bash
+# To ensure a clean build the first time or after configuration changes:
+# west build -p auto -b nucleo_f767zi ..
+
+# Standard build command:
+west build -b nucleo_f767zi ..
+```
+- `-b nucleo_f767zi` specifies the target board.
+- `..` tells `west` to look for the application source in the parent directory (`/app`).
+
+If the build is successful, the firmware will be located at `build/zephyr/zephyr.elf` (and `zephyr.bin`, `zephyr.hex`).
+
+### 4. Flash the Application
+
+Flashing the firmware to the ST Nucleo STM32F767 board typically requires tools like `STM32_Programmer_CLI` or `openocd`, which are usually run from the host machine or need specific USB device access.
+
+**Option A: Using `west flash` (if host tools are configured and accessible via Docker)**
+
+If your Docker container has access to the USB device (e.g., via `--device=/dev/ttyACM0` or similar, and udev rules are set up on the host), and `west` is configured with the correct flasher (e.g., `openocd`, `stlink`), you might be able to use:
 
 ```bash
-cd ~/zephyrproject/zephyr
-west build -p auto -b nucleo_f767zi samples/hello_world
-```
-
-This should compile a simple "Hello World" program to ensure that Zephyr is working on the board.
-
----
-
-#### 3. Integrate micro-ROS into Zephyr
-
-**a. Clone the micro-ROS Zephyr package:**
-
-In your workspace, clone the micro-ROS repository and the Zephyr-specific modules.
-
-```bash
-cd ~/zephyrproject/zephyr
-git clone https://github.com/micro-ROS/micro_ros_zephyr_module.git modules/micro_ros
-west update
-```
-
-**b. Enable micro-ROS in your application:**
-
-In your application folder, configure CMakeLists and `prj.conf` files to include micro-ROS. Here's an example configuration:
-
-- **prj.conf**:
-
-```plaintext
-CONFIG_MICRO_ROS=y
-CONFIG_NETWORKING=y
-CONFIG_NET_L2_ETHERNET=y
-CONFIG_ETH_NATIVE_POSIX=y
-CONFIG_POSIX_API=y
-CONFIG_NEWLIB_LIBC=y
-CONFIG_STDOUT_CONSOLE=y
-```
-
-- **CMakeLists.txt**:
-
-```cmake
-cmake_minimum_required(VERSION 3.20.0)
-find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(micro_ros_app)
-
-target_sources(app PRIVATE src/main.c)
-```
-
-**c. Create your application in `src/main.c`:**
-
-In your `src/main.c`, initialize micro-ROS, set up the necessary publishers, subscribers, or clients:
-
-```c
-#include <zephyr.h>
-#include <rcl/rcl.h>
-#include <micro_ros/utilities.h>
-
-void main(void) {
-    rcl_node_t node;
-    rcl_init_options_t options = rcl_get_zero_initialized_init_options();
-    
-    rcl_init_options_init(&options, rcl_get_default_allocator());
-    
-    rcl_node_options_t node_ops = rcl_node_get_default_options();
-    rcl_node_init(&node, "zephyr_node", "", &options, &node_ops);
-
-    while (1) {
-        rcl_spin_some(&node, RCL_MS_TO_NS(10));
-        k_sleep(K_SECONDS(1));
-    }
-}
-```
-
----
-
-#### 4. Build and Flash the Application
-
-Now that your micro-ROS application is integrated with Zephyr, it’s time to build and flash it to the ST Nucleo board.
-
-**a. Build the application:**
-
-```bash
-west build -b nucleo_f767zi
-```
-
-**b. Flash the firmware:**
-
-Connect your ST Nucleo STM32F767 board and flash the firmware using the following command:
-
-```bash
+# Inside the container, in the build directory
 west flash
 ```
+*Note: This often requires additional Docker container privileges and host-side configuration (udev rules for device access, OpenOCD/STLink installation on the host if west calls out to them).*
 
----
+**Option B: Copy firmware to host and flash manually**
 
-#### 5. Verify micro-ROS Functionality
+1.  From **another terminal on your host machine** (not inside the container), copy the firmware from the container to your host. First, find your container ID:
+    ```bash
+    docker ps 
+    ```
+    Look for the container running `micro-ros-zephyr-stm32f767`. Let's say its ID is `your_container_id`.
 
-Once the firmware is flashed, you should verify that the micro-ROS nodes are running and communicating correctly. You can use `ros2` commands from your ROS 2 workspace:
+2.  Copy the firmware (e.g., `zephyr.bin`):
+    ```bash
+    docker cp your_container_id:/app/build/zephyr/zephyr.bin .
+    ```
+
+3.  Then, use your preferred flashing tool on the host to flash `zephyr.bin` to the Nucleo board. For example, using `STM32_Programmer_CLI` (ensure it's installed and in your PATH):
+    ```bash
+    STM32_Programmer_CLI -c port=SWD -d zephyr.bin 0x08000000 -v
+    ```
+    Or using `openocd`:
+    ```bash
+    # Example openocd command (may vary based on your setup)
+    # openocd -f board/st_nucleo_f7.cfg -c "program zephyr.elf verify reset exit"
+    ```
+
+### 5. Run the micro-ROS Agent
+
+To communicate with your micro-ROS application running on the STM32, you need a micro-ROS agent running on a machine that can reach the STM32 via its configured transport (UDP/IP in this case).
+
+If your STM32 board is connected to your local network (e.g., via Ethernet), and your host machine is on the same network:
+
+1.  **Install the micro-ROS agent** on your host machine (or another Docker container with network access):
+    ```bash
+    # If you have a ROS 2 Humble/Iron/Jazzy environment sourced:
+    ros2 run micro_ros_agent micro_ros_agent udp4 --port 8888 
+    # Or using the Docker image for the agent:
+    # docker run -it --rm --net=host microros/micro-ros-agent:jazzy udp4 --port 8888 -v 6
+    ```
+    Ensure the agent's IP address and port match what the firmware expects (see `prj.conf`). The sample uses UDP on port 8888.
+
+Once the agent is running and the STM32 application starts, you should see the `zephyr_int32_publisher` node and its `/zephyr_int_topic` topic appear in your ROS 2 network:
 
 ```bash
+# On your host machine with ROS 2 environment sourced
 ros2 node list
-ros2 topic echo /your_topic
+ros2 topic list
+ros2 topic echo /zephyr_int_topic
 ```
 
----
+## Sample Application
 
-### Additional Considerations
+The sample application in `src/main.cpp`:
+- Initializes a micro-ROS node named `zephyr_int32_publisher`.
+- Creates a publisher on the topic `zephyr_int_topic`.
+- Periodically publishes an incrementing `std_msgs/msg/Int32` message to this topic.
+- Prints messages to the Zephyr console (e.g., "Sent: X").
 
-- **STM32 peripherals**: If you are using additional STM32 peripherals like UART, SPI, or CAN for communication with micro-ROS, configure these in STM32CubeMX and then regenerate the code.
-  
-- **Debugging**: Use `west debug` or open an SWD debugger to inspect the code in real time.
-
----
-
-With these steps, you should have a micro-ROS application running on Zephyr for the ST Nucleo STM32F767.
+This demonstrates a basic working micro-ROS setup on Zephyr for the Nucleo F767ZI.
